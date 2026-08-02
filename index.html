@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FieldOps Studio</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config={
+    theme:{
+        extend:{
+            fontFamily:{sans:['Inter','sans-serif']},
+            colors:{
+                s0:'#f8fafc',
+                s1:'#ffffff',
+                s2:'#f1f5f9',
+                s3:'#e2e8f0',
+                border:'#cbd5e1',
+                muted:'#64748b',
+                darktext:'#0f172a',
+                accent:'#0f172a'
+            }
+        }
+    }
+}
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#f8fafc;color:#0f172a;overflow:hidden;height:100vh}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:10px}
+
+/* Map Containers & Leaflet Override */
+.leaflet-container{background:#05070a!important;font-family:'Inter',sans-serif!important}
+.leaflet-control-zoom{border:1px solid #cbd5e1!important;border-radius:8px!important;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)!important}
+.leaflet-control-zoom a{background:#ffffff!important;color:#0f172a!important;border-color:#e2e8f0!important;width:30px!important;height:30px!important;line-height:30px!important}
+.leaflet-control-zoom a:hover{background:#f1f5f9!important}
+.leaflet-popup-content-wrapper{background:#ffffff!important;color:#0f172a!important;border-radius:10px!important;border:1px solid #cbd5e1;box-shadow:0 10px 25px -5px rgba(0,0,0,0.1)!important}
+.leaflet-popup-tip{background:#ffffff!important}
+.leaflet-popup-close-button{color:#94a3b8!important;font-size:18px!important;right:6px!important;top:4px!important}
+.leaflet-popup-close-button:hover{color:#0f172a!important}
+.leaflet-popup-content{margin:12px 16px!important}
+
+.dark-tiles .leaflet-tile {
+    filter: invert(100%) hue-rotate(180deg) brightness(2.2) contrast(3.5) saturate(0) !important;
+}
+
+/* Class applied when hiding map tiles for pure image overlay mode */
+.hide-tiles .leaflet-tile-pane {
+    display: none !important;
+}
+
+.zone-label-tooltip {
+    background: #0f172a !important;
+    color: #ffffff !important;
+    border: 1px solid #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 11px !important;
+    padding: 3px 8px !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+}
+.zone-label-tooltip::before { display: none !important; }
+
+.pin-icon{background:transparent!important;border:none!important;box-shadow:none!important;color:#fff;font-weight:700;font-size:11px;font-family:'Inter',sans-serif}
+@keyframes ti{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes to2{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
+.t-in{animation:ti .3s ease-out forwards}.t-out{animation:to2 .25s ease-in forwards}
+.zi:hover{background:#f1f5f9}.zi{transition:background .15s}
+.tb{transition:all .15s}.tb.on{transform:scale(1.02)}
+.sr-item:hover{background:#f1f5f9}.sr-item{transition:background .10s}
+@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#0f172a!important;box-shadow:0 0 0 2px rgba(15,23,42,0.15)!important}
+</style>
+</head>
+<body class="bg-s0 text-darktext flex flex-col h-screen overflow-hidden">
+
+<!-- ===== MAP SCREEN ===== -->
+<div class="flex-1 flex flex-col h-full">
+    <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-20 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="w-2.5 h-2.5 rounded-full bg-slate-900"></div>
+            <span class="font-bold text-sm text-slate-900">FieldOps Studio</span>
+            <span id="mode-badge" class="text-[10px] font-bold tracking-wide bg-slate-900 text-white px-2 py-0.5 rounded-md">MAP MODE</span>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <!-- PROMINENT UPLOAD BUTTON IN HEADER -->
+            <label class="px-3.5 py-1.5 text-xs font-bold rounded-lg border-2 border-dashed border-slate-900 bg-slate-50 text-slate-900 hover:bg-slate-900 hover:text-white transition-all cursor-pointer flex items-center gap-2 shadow-sm">
+                <i class="fa-solid fa-cloud-arrow-up text-sm"></i>
+                <span>Load Layout / Blueprint Image</span>
+                <input type="file" class="img-upload-input" accept="image/*" class="hidden">
+            </label>
+
+            <button id="btn-clear-img" onclick="app.clearImageOverlay()" class="hidden px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors">
+                <i class="fa-solid fa-map mr-1"></i>Show Map
+            </button>
+
+            <button onclick="app.exportPNG()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm">
+                <i class="fa-solid fa-download mr-1.5"></i>Export PNG
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex relative overflow-hidden">
+        <!-- Sidebar Controls -->
+        <aside id="sidebar" class="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 z-10 overflow-hidden shadow-sm">
+            <div class="flex-1 overflow-y-auto p-3 space-y-4">
+                
+                <!-- PROMINENT SIDEBAR CARD FOR CUSTOM IMAGE -->
+                <section class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <h3 class="text-[11px] font-bold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <i class="fa-solid fa-image text-slate-700"></i>
+                        <span>Custom Image Mode</span>
+                    </h3>
+                    <p class="text-[10px] text-slate-500 mb-2.5 leading-tight">Zone on top of your own custom floor plan, map, or blueprint image.</p>
+                    <label class="w-full py-2 px-3 bg-slate-900 text-white hover:bg-slate-800 transition-colors text-xs font-semibold rounded-lg cursor-pointer flex items-center justify-center gap-2 text-center shadow-sm">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span>Choose Layout File</span>
+                        <input type="file" class="img-upload-input hidden" accept="image/*">
+                    </label>
+                </section>
+
+                <div class="h-px bg-slate-100"></div>
+
+                <section id="sec-tools">
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Preset & Custom Zones</h3>
+                    <div id="z-tools" class="grid grid-cols-2 gap-1.5 mb-3"></div>
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Preset & Custom Pins</h3>
+                    <div id="p-tools" class="grid grid-cols-2 gap-1.5 mb-3"></div>
+                    
+                    <div id="draw-hint" class="hidden bg-slate-100 border border-slate-300 rounded-lg p-2.5 mb-2">
+                        <div class="flex items-center gap-2 mb-1"><div class="w-2 h-2 rounded-full bg-slate-900"></div><span class="text-xs font-bold text-slate-900" id="dh-t"></span></div>
+                        <p class="text-[11px] text-slate-600" id="dh-x"></p>
+                        <button onclick="app.cancelDraw()" class="w-full mt-2 py-1 text-[11px] font-semibold rounded bg-slate-900 text-white hover:bg-slate-800">Cancel</button>
+                    </div>
+                </section>
+                <div class="h-px bg-slate-100"></div>
+                <section><h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Active Zones <span id="z-cn" class="text-slate-900 font-bold">0</span></h3><div id="z-ls" class="space-y-1 max-h-40 overflow-y-auto"></div></section>
+                <div class="h-px bg-slate-100"></div>
+                <section><h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Active Pins <span id="p-cn" class="text-slate-900 font-bold">0</span></h3><div id="p-ls" class="space-y-1 max-h-32 overflow-y-auto"></div></section>
+            </div>
+            <div class="p-3 border-t border-slate-200 text-[11px] font-medium text-slate-500 bg-slate-50">Zoom Level: <span id="z-if" class="text-slate-900 font-bold">—</span></div>
+        </aside>
+
+        <!-- Map / Image Viewport -->
+        <div class="flex-1 relative" id="map-export-area">
+            <div id="map" class="absolute inset-0 z-0 bg-[#05070a]"></div>
+            
+            <!-- Location Search Bar (hidden in Image Mode) -->
+            <div id="search-controls" class="absolute top-3 left-3 right-3 z-[5] flex gap-2 max-w-md">
+                <div class="flex-1 bg-white border border-slate-200 rounded-lg shadow-md overflow-hidden flex items-center" id="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs pl-3"></i>
+                    <input id="s-in" type="text" placeholder="Lookup location name (e.g. Times Square)..." class="flex-1 bg-transparent text-xs text-slate-900 placeholder-slate-400 py-2.5 px-2.5 focus:outline-none" autocomplete="off">
+                    <button onclick="app.doSearch()" class="px-3 py-2.5 bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors">Go</button>
+                    <button onclick="document.getElementById('coord-in').classList.toggle('hidden')" class="px-2.5 text-slate-400 hover:text-slate-700" title="Manual Coordinates"><i class="fa-solid fa-location-crosshairs text-xs"></i></button>
+                </div>
+            </div>
+
+            <!-- Coordinate Input -->
+            <div id="coord-in" class="hidden absolute top-14 left-3 z-[5] bg-white border border-slate-200 rounded-lg p-2.5 shadow-lg flex gap-2">
+                <input id="lat-in" type="number" step="any" placeholder="Lat" class="w-24 bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-900 placeholder-slate-400">
+                <input id="lng-in" type="number" step="any" placeholder="Lng" class="w-24 bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-900 placeholder-slate-400">
+                <button onclick="app.goCoords()" class="px-3 py-1 bg-slate-900 text-white text-xs font-semibold rounded hover:bg-slate-800">Fly</button>
+            </div>
+
+            <div id="search-res" class="hidden absolute top-14 left-3 right-3 max-w-md z-[5] bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto"></div>
+            <div id="crd-box" class="absolute bottom-3 right-3 z-[5] bg-slate-900 text-white border border-slate-800 rounded-md px-2.5 py-1 text-[10px] font-mono shadow-md"><span id="crd">0.0000, 0.0000</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Zone Modal -->
+<div id="z-md" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onclick="this.classList.add('hidden')">
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl" onclick="event.stopPropagation()">
+        <h2 class="font-bold text-slate-900 text-base mb-3">Save Zone</h2>
+        <input id="zn" type="text" placeholder="Zone name" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-sm text-slate-900 placeholder-slate-400 mb-2.5">
+        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-700 mb-2.5">
+            <div id="zm-d" class="w-2.5 h-2.5 rounded-full"></div>
+            <span id="zm-l"></span>
+        </div>
+        <div id="z-clr-wrap" class="hidden mb-2.5">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Custom Marking Color</label>
+            <div class="flex items-center gap-2">
+                <input id="z-color" type="color" value="#a855f7" class="w-9 h-8 rounded border border-slate-200 cursor-pointer p-0.5">
+                <span class="text-xs font-mono text-slate-600" id="z-color-hex">#a855f7</span>
+            </div>
+        </div>
+        <textarea id="zd" rows="2" placeholder="Description (optional)" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-sm text-slate-900 placeholder-slate-400 resize-none mb-4"></textarea>
+        <div class="flex gap-2.5"><button onclick="app.closeM();app.cancelDraw()" class="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button><button onclick="app.saveZone()" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800">Save Zone</button></div>
+    </div>
+</div>
+
+<!-- Pin Modal -->
+<div id="p-md" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onclick="this.classList.add('hidden')">
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-xs mx-4 shadow-2xl" onclick="event.stopPropagation()">
+        <h2 class="font-bold text-slate-900 text-base mb-3">Save Pin</h2>
+        <input id="pn" type="text" placeholder="Pin name (optional)" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-sm text-slate-900 placeholder-slate-400 mb-2.5">
+        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-700 mb-2.5">
+            <div id="pm-d" class="w-2.5 h-2.5 rounded-full"></div>
+            <span id="pm-l"></span>
+        </div>
+        <div id="p-clr-wrap" class="hidden mb-2.5">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Custom Pin Color</label>
+            <div class="flex items-center gap-2">
+                <input id="p-color" type="color" value="#a855f7" class="w-9 h-8 rounded border border-slate-200 cursor-pointer p-0.5">
+                <span class="text-xs font-mono text-slate-600" id="p-color-hex">#a855f7</span>
+            </div>
+        </div>
+        <select id="ps" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 mb-4"><option value="ACTIVE">Active</option><option value="DEPLETED">Depleted</option><option value="INACTIVE">Inactive</option></select>
+        <div class="flex gap-2.5"><button onclick="app.closeM();app.cancelDraw()" class="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button><button onclick="app.savePin()" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800">Save Pin</button></div>
+    </div>
+</div>
+
+<div id="t-c" class="fixed top-14 right-4 z-[60] space-y-2 w-72"></div>
+
+<script>
+const ZC={ASSEMBLY:{l:'Assembly Point',c:'#e8a000',i:'fa-people-group'},MEDICAL:{l:'Medical Hub',c:'#ef4444',i:'fa-kit-medical'},WATER:{l:'Water Station',c:'#06b6d4',i:'fa-droplet'},EMERGENCY_ROUTE:{l:'Emergency Corridor',c:'#f97316',i:'fa-road'},RESTRICTED:{l:'Restricted Zone',c:'#ec4899',i:'fa-ban'},CUSTOM:{l:'Custom Zone',c:'#a855f7',i:'fa-pen-to-square'}};
+const PT={FIRST_AID:{l:'First Aid',c:'#ef4444',s:'+'},WATER_TRUCK:{l:'Water Truck',c:'#06b6d4',s:'W'},VOLUNTEER_DESK:{l:'Volunteer Desk',c:'#22c55e',s:'V'},CUSTOM:{l:'Custom Pin',c:'#a855f7',s:'C'}};
+const SS={ACTIVE:{l:'Active',c:'#22c55e'},DEPLETED:{l:'Depleted',c:'#f97316'},INACTIVE:{l:'Inactive',c:'#64748b'}};
+
+class Toast{
+    constructor(id){this.el=document.getElementById(id)}
+    show(msg){
+        const d=document.createElement('div');
+        d.className=`t-in flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-900 text-white text-xs font-semibold shadow-xl`;
+        d.innerHTML=`<i class="fa-solid fa-circle-info text-white"></i><span>${msg}</span>`;
+        this.el.appendChild(d);
+        setTimeout(()=>{d.classList.replace('t-in','t-out');setTimeout(()=>d.remove(),300)},3000);
+    }
+}
+
+class App{
+    constructor(){
+        this.toast=new Toast('t-c');
+        this.map=null;
+        this.drawMode=null;this.drawCat=null;this.drawType=null;
+        this.verts=[];this.markers=[];this.previewLine=null;this.previewPoly=null;this.tempMarker=null;
+        this.zoneLayers=[];this.pinLayers=[];this.imageOverlay=null;
+        this.zones=[];this.pins=[];this._lc=0;
+    }
+
+    init(){
+        this.initMap();
+        this.buildTools();
+        this.wireSearch();
+        this.wireImageUpload();
+
+        document.addEventListener('keydown',e=>{
+            if(e.key==='Escape'){this.cancelDraw();this.closeM();document.getElementById('search-res').classList.add('hidden')}
+        });
+        document.getElementById('z-color').addEventListener('input', e => document.getElementById('z-color-hex').textContent = e.target.value);
+        document.getElementById('p-color').addEventListener('input', e => document.getElementById('p-color-hex').textContent = e.target.value);
+    }
+
+    initMap(){
+        try{
+            this.map=L.map('map',{zoomControl:true,attributionControl:false}).setView([40.7580, -73.9855], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(this.map);
+            this.map.getContainer().classList.add('dark-tiles');
+            
+            this.map.on('click',e=>{if(this.drawMode==='polygon')this.onPolyClick(e);else if(this.drawMode==='point')this.onPointClick(e)});
+            this.map.on('dblclick',e=>{if(this.drawMode==='polygon'&&this.verts.length>=3){L.DomEvent.stop(e);this.completePoly()}});
+            this.map.on('mousemove',e=>{
+                document.getElementById('crd').textContent=`${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+                if(this.drawMode==='polygon')this.onPolyMove(e)
+            });
+            this.map.on('zoomend moveend',()=>{document.getElementById('z-if').textContent=this.map.getZoom().toFixed(1)});
+            document.getElementById('z-if').textContent=this.map.getZoom().toFixed(1);
+        }catch(e){console.error(e)}
+    }
+
+    wireImageUpload(){
+        document.querySelectorAll('.img-upload-input').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if(!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const center = this.map.getCenter();
+                        const dLat = 0.005; 
+                        const dLng = dLat * (img.width / img.height);
+                        const bounds = [[center.lat - dLat, center.lng - dLng], [center.lat + dLat, center.lng + dLng]];
+
+                        if (this.imageOverlay) this.map.removeLayer(this.imageOverlay);
+                        
+                        this.imageOverlay = L.imageOverlay(evt.target.result, bounds).addTo(this.map);
+                        this.map.fitBounds(bounds);
+                        
+                        // HIDE THE MAP TILES AND SEARCH CONSTRUCTS
+                        this.map.getContainer().classList.add('hide-tiles');
+                        document.getElementById('search-controls').classList.add('hidden');
+                        document.getElementById('btn-clear-img').classList.remove('hidden');
+                        document.getElementById('mode-badge').textContent = 'CUSTOM IMAGE MODE';
+                        document.getElementById('mode-badge').className = 'text-[10px] font-bold tracking-wide bg-amber-600 text-white px-2 py-0.5 rounded-md';
+
+                        this.toast.show('Custom Image Loaded — Map hidden');
+                    };
+                    img.src = evt.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+    }
+
+    clearImageOverlay(){
+        if(this.imageOverlay){
+            this.map.removeLayer(this.imageOverlay);
+            this.imageOverlay = null;
+        }
+        this.map.getContainer().classList.remove('hide-tiles');
+        document.getElementById('search-controls').classList.remove('hidden');
+        document.getElementById('btn-clear-img').classList.add('hidden');
+        document.getElementById('mode-badge').textContent = 'MAP MODE';
+        document.getElementById('mode-badge').className = 'text-[10px] font-bold tracking-wide bg-slate-900 text-white px-2 py-0.5 rounded-md';
+        this.toast.show('Switched back to Map View');
+    }
+
+    onPolyClick(e){
+        const now=Date.now();if(now-this._lc<300)return;this._lc=now;
+        if(this.verts.length>=3){
+            const fp=this.map.latLngToContainerPoint(this.verts[0]);
+            if(Math.hypot(fp.x-e.containerPoint.x,fp.y-e.containerPoint.y)<15){this.completePoly();return}
+        }
+        const color = ZC[this.drawCat]?.c || '#ffffff';
+        this.verts.push(e.latlng);
+        const m=L.circleMarker(e.latlng,{radius:5,color,fillColor:color,fillOpacity:1,weight:2}).addTo(this.map);
+        this.markers.push(m);
+        if(this.previewLine)this.map.removeLayer(this.previewLine);
+        this.previewLine=L.polyline(this.verts,{color,weight:2,dashArray:'5,5'}).addTo(this.map);
+        this.updateDrawHint();
+    }
+    
+    onPolyMove(e){
+        if(this.verts.length<1)return;
+        const color = ZC[this.drawCat]?.c || '#ffffff';
+        if(this.previewPoly)this.map.removeLayer(this.previewPoly);
+        if(this.verts.length>=2)this.previewPoly=L.polygon([...this.verts,e.latlng],{color,fillColor:color,fillOpacity:.2,weight:1}).addTo(this.map);
+    }
+    
+    completePoly(){
+        if(this.verts.length<3)return;
+        this.pendGeom={type:'Polygon',coordinates:[this.verts.map(v=>[v.lng,v.lat]).concat([[this.verts[0].lng,this.verts[0].lat]])]};
+        this.clearMapDrafting();
+        this.showZoneModal();
+    }
+
+    onPointClick(e){
+        const now=Date.now();if(now-this._lc<300)return;this._lc=now;
+        const color = PT[this.drawType]?.c || '#ffffff';
+        this.pendLoc={type:'Point',coordinates:[e.latlng.lng,e.latlng.lat]};
+        this.tempMarker=L.circleMarker(e.latlng,{radius:12,color:'#fff',fillColor:color,fillOpacity:1,weight:3}).addTo(this.map);
+        this.showPinModal();
+    }
+
+    startDraw(mode,key){this.cancelDraw();this.drawMode=mode;if(mode==='polygon'){this.drawCat=key;this.map.doubleClickZoom.disable()}else{this.drawType=key}this.updateDrawHint();this.updateToolBtns()}
+    
+    clearMapDrafting(){
+        this.markers.forEach(m=>this.map&&this.map.removeLayer(m));
+        this.markers=[];
+        if(this.previewLine&&this.map)this.map.removeLayer(this.previewLine);
+        this.previewLine=null;
+        if(this.previewPoly&&this.map)this.map.removeLayer(this.previewPoly);
+        this.previewPoly=null;
+        if(this.tempMarker&&this.map)this.map.removeLayer(this.tempMarker);
+        this.tempMarker=null;
+        this.verts=[];
+    }
+
+    cancelDraw(){
+        this.clearMapDrafting();
+        this.drawMode=null;this.drawCat=null;this.drawType=null;
+        if(this.map)this.map.doubleClickZoom.enable();
+        document.getElementById('draw-hint').classList.add('hidden');
+        this.updateToolBtns();
+    }
+
+    updateDrawHint(){
+        const h=document.getElementById('draw-hint');
+        if(!this.drawMode){h.classList.add('hidden');return}
+        h.classList.remove('hidden');
+        if(this.drawMode==='polygon'){
+            const c=ZC[this.drawCat];
+            document.getElementById('dh-t').textContent=c.l;
+            document.getElementById('dh-x').textContent=this.verts.length<3?`${this.verts.length} vertices. Need ${3-this.verts.length} more.`:`${this.verts.length} vertices. Double-click to finish.`;
+        }else{
+            const t=PT[this.drawType];
+            document.getElementById('dh-t').textContent=t.l;
+            document.getElementById('dh-x').textContent='Click on the map.';
+        }
+    }
+
+    showZoneModal(){
+        const c=ZC[this.drawCat];
+        document.getElementById('zn').value='';document.getElementById('zd').value='';
+        document.getElementById('zm-l').textContent=c.l;
+        const clrWrap=document.getElementById('z-clr-wrap');
+        if(this.drawCat==='CUSTOM'){
+            clrWrap.classList.remove('hidden');
+            document.getElementById('zm-d').style.background=document.getElementById('z-color').value;
+        }else{
+            clrWrap.classList.add('hidden');
+            document.getElementById('zm-d').style.background=c.c;
+        }
+        document.getElementById('z-md').classList.remove('hidden');
+        setTimeout(()=>document.getElementById('zn').focus(),50);
+    }
+    
+    showPinModal(){
+        const t=PT[this.drawType];
+        document.getElementById('pn').value='';
+        document.getElementById('pm-l').textContent=t.l;
+        document.getElementById('ps').value='ACTIVE';
+        const clrWrap=document.getElementById('p-clr-wrap');
+        if(this.drawType==='CUSTOM'){
+            clrWrap.classList.remove('hidden');
+            document.getElementById('pm-d').style.background=document.getElementById('p-color').value;
+        }else{
+            clrWrap.classList.add('hidden');
+            document.getElementById('pm-d').style.background=t.c;
+        }
+        document.getElementById('p-md').classList.remove('hidden');
+    }
+    
+    closeM(){document.getElementById('z-md').classList.add('hidden');document.getElementById('p-md').classList.add('hidden')}
+
+    saveZone(){
+        const name=document.getElementById('zn').value.trim();
+        if(!name){this.toast.show('Enter a name');return}
+        let color = ZC[this.drawCat]?.c;
+        if(this.drawCat==='CUSTOM') color = document.getElementById('z-color').value;
+
+        const zone = {
+            id: 'z_' + Date.now(),
+            name,
+            category: this.drawCat,
+            description: document.getElementById('zd').value.trim(),
+            color,
+            geometry: this.pendGeom
+        };
+        
+        this.zones.push(zone);
+        this.closeM();this.cancelDraw();
+        this.renderAll();this.updateUI();
+        this.toast.show('Zone saved');
+    }
+
+    savePin(){
+        const pinName = document.getElementById('pn').value.trim();
+        let color = PT[this.drawType]?.c;
+        if(this.drawType==='CUSTOM') color = document.getElementById('p-color').value;
+
+        const pin = {
+            id: 'p_' + Date.now(),
+            name: pinName || PT[this.drawType]?.l,
+            type: this.drawType,
+            color,
+            status: document.getElementById('ps').value,
+            location: this.pendLoc
+        };
+
+        this.pins.push(pin);
+        this.closeM();this.cancelDraw();
+        this.renderAll();this.updateUI();
+        this.toast.show('Pin saved');
+    }
+
+    delZone(id){this.zones=this.zones.filter(z=>z.id!==id);this.renderAll();this.updateUI()}
+    delPin(id){this.pins=this.pins.filter(p=>p.id!==id);this.renderAll();this.updateUI()}
+
+    renderAll(){
+        this.zoneLayers.forEach(l=>this.map.removeLayer(l));this.zoneLayers=[];
+        this.pinLayers.forEach(l=>this.map.removeLayer(l));this.pinLayers=[];
+        this.zones.forEach(z=>this._addZoneLayer(z));
+        this.pins.forEach(p=>this._addPinLayer(p));
+    }
+
+    _addZoneLayer(z){
+        const layer=L.geoJSON(z.geometry,{
+            style:{color:z.color,fillColor:z.color,fillOpacity:.30,weight:2.5},
+            onEachFeature:(f,l)=>{
+                l.bindPopup(`<div style="min-width:160px"><b style="font-size:13px">${z.name}</b><br><span style="font-size:11px;color:#64748b">${ZC[z.category]?.l||'Zone'}</span>${z.description?`<p style="font-size:11px;margin-top:4px">${z.description}</p>`:''}<button onclick="app.delZone('${z.id}')" style="margin-top:8px;width:100%;padding:4px;background:#0f172a;color:#fff;border-radius:4px;font-size:11px">Delete</button></div>`);
+                l.bindTooltip(z.name,{permanent:true,direction:'center',className:'zone-label-tooltip'});
+            }
+        }).addTo(this.map);
+        this.zoneLayers.push(layer);
+    }
+    
+    _addPinLayer(p){
+        const[lng,lat]=p.location.coordinates;
+        const symbol = PT[p.type]?.s || '•';
+        const m=L.circleMarker([lat,lng],{radius:p.status==='ACTIVE'?10:7,color:'#0f172a',fillColor:p.color,fillOpacity:p.status==='INACTIVE'?.35:1,weight:2.5}).addTo(this.map);
+        m.bindTooltip(symbol,{permanent:true,direction:'center',className:'pin-icon'});
+        m.bindPopup(`<div style="min-width:140px"><b style="font-size:13px">${p.name}</b><br><span style="font-size:10px;font-weight:600">${p.status}</span><br><button onclick="app.delPin('${p.id}')" style="margin-top:8px;width:100%;padding:4px;background:#0f172a;color:#fff;border-radius:4px;font-size:11px">Delete</button></div>`);
+        this.pinLayers.push(m);
+    }
+
+    wireSearch(){
+        const inp=document.getElementById('s-in');let t;
+        inp.addEventListener('input',()=>{
+            clearTimeout(t);
+            const q=inp.value.trim();
+            if(q.length<2){document.getElementById('search-res').classList.add('hidden');return}
+            t=setTimeout(()=>this._search(q),500)
+        });
+        inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();this.doSearch()}});
+    }
+
+    async _search(q){
+        const r=document.getElementById('search-res');
+        r.innerHTML='<div class="px-3 py-2.5 text-xs text-slate-500"><i class="fa-solid fa-spinner spin mr-1.5"></i>Searching location...</div>';
+        r.classList.remove('hidden');
+        try{
+            const d=await(await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`)).json();
+            if(!d.length){r.innerHTML='<div class="px-3 py-2.5 text-xs text-slate-500">No matching location found</div>';return}
+            this._sr=d;
+            r.innerHTML=d.map((x,i)=>`<div class="sr-item px-3 py-2.5 cursor-pointer border-b border-slate-100" onclick="app._pickR(${i})"><div class="text-xs font-medium text-slate-900">${x.display_name.split(',').slice(0,3).join(', ')}</div><div class="text-[10px] text-slate-400 mt-0.5">${parseFloat(x.lat).toFixed(4)}, ${parseFloat(x.lon).toFixed(4)}</div></div>`).join('');
+        }catch{r.innerHTML='<div class="px-3 py-2.5 text-xs text-slate-500">Search failed</div>'}
+    }
+
+    doSearch(){const q=document.getElementById('s-in').value.trim();if(q)this._search(q)}
+    
+    _pickR(i){
+        const r=this._sr[i];
+        this.map.flyTo([parseFloat(r.lat),parseFloat(r.lon)],16,{duration:1.2});
+        document.getElementById('search-res').classList.add('hidden');
+        document.getElementById('s-in').value=r.display_name.split(',').slice(0,3).join(', ');
+        this.toast.show(`Navigated to ${r.display_name.split(',')[0]}`);
+    }
+
+    goCoords(){
+        const lat=parseFloat(document.getElementById('lat-in').value),lng=parseFloat(document.getElementById('lng-in').value);
+        if(isNaN(lat)||isNaN(lng)){this.toast.show('Invalid coordinates');return}
+        this.map.flyTo([lat,lng],16);
+        document.getElementById('coord-in').classList.add('hidden');
+    }
+
+    buildTools(){
+        document.getElementById('z-tools').innerHTML=Object.entries(ZC).map(([k,c])=>`<button class="tb flex items-center justify-start gap-2 px-3 py-2 text-[11px] font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 border border-slate-900 shadow-sm" data-cat="${k}" onclick="app.startDraw('polygon','${k}')"><i class="fa-solid ${c.i} text-[10px]"></i><span>${c.l.split(' ')[0]}</span></button>`).join('');
+        document.getElementById('p-tools').innerHTML=Object.entries(PT).map(([k,t])=>`<button class="tb flex items-center justify-start gap-2 px-3 py-2 text-[11px] font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 border border-slate-900 shadow-sm" data-pin="${k}" onclick="app.startDraw('point','${k}')"><i class="fa-solid fa-circle text-[6px]"></i><span>${t.l.split(' ')[0]}</span></button>`).join('');
+    }
+
+    updateToolBtns(){
+        document.querySelectorAll('.tb').forEach(b=>{
+            const iz=b.dataset.cat,ip=b.dataset.pin,active=(iz&&this.drawMode==='polygon'&&this.drawCat===iz)||(ip&&this.drawMode==='point'&&this.drawType===ip);
+            b.classList.toggle('on',active);
+            if(active){
+                b.className="tb flex items-center justify-start gap-2 px-3 py-2 text-[11px] font-semibold rounded-lg bg-slate-900 text-white border-2 border-slate-900 shadow-md ring-2 ring-slate-900/20";
+            } else {
+                b.className="tb flex items-center justify-start gap-2 px-3 py-2 text-[11px] font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 border border-slate-900 shadow-sm";
+            }
+        });
+    }
+
+    updateUI(){
+        document.getElementById('z-cn').textContent=this.zones.length;
+        document.getElementById('p-cn').textContent=this.pins.length;
+        
+        document.getElementById('z-ls').innerHTML=this.zones.length?this.zones.map(z=>`<div class="zi flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer border border-transparent hover:border-slate-200"><div class="w-2 h-2 rounded-full shrink-0" style="background:${z.color}"></div><span class="text-xs font-semibold text-slate-900 truncate flex-1">${z.name}</span><button onclick="app.delZone('${z.id}')" class="text-slate-400 hover:text-slate-900 text-[11px]"><i class="fa-solid fa-trash-can"></i></button></div>`).join(''):'<div class="text-[11px] text-slate-400 px-2 py-1 italic">No active zones</div>';
+        
+        document.getElementById('p-ls').innerHTML=this.pins.length?this.pins.map(p=>`<div class="zi flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer border border-transparent hover:border-slate-200"><div class="w-2 h-2 rounded-full shrink-0" style="background:${p.color}"></div><span class="text-xs font-semibold text-slate-900 truncate flex-1">${p.name}</span><button onclick="app.delPin('${p.id}')" class="text-slate-400 hover:text-slate-900 text-[11px]"><i class="fa-solid fa-trash-can"></i></button></div>`).join(''):'<div class="text-[11px] text-slate-400 px-2 py-1 italic">No active pins</div>';
+        this.updateToolBtns();
+    }
+
+    exportPNG(){
+        this.toast.show('Generating high-res layout image...');
+        const exportTarget = document.getElementById('map-export-area');
+        
+        html2canvas(exportTarget, {
+            useCORS: true,
+            allowTaint: true,
+            logging: false
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `fieldops-export-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            this.toast.show('Export downloaded!');
+        }).catch(() => {
+            this.toast.show('Failed to generate PNG image.');
+        });
+    }
+}
+
+const app=new App();
+window.onload=()=>app.init();
+</script>
+</body>
+</html>
