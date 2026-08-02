@@ -1,3 +1,6 @@
+<img width="1652" height="754" alt="image" src="https://github.com/user-attachments/assets/c4d64052-fd20-40e8-8302-7745e9eb5b2a" />
+
+
 # FieldOps Studio
 
 FieldOps Studio is a browser-based mapping tool for planning field operations. It lets a user draw zones and place pins on either a live interactive map or a custom uploaded image (such as a floor plan or blueprint), then export the result as a PNG image.
